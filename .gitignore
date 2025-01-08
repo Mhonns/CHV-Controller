@@ -21,3 +21,7 @@ Cargo.lock
 #.idea/
 
 os/
+
+# Ignore all vm data or config
+vms-config
+storage
