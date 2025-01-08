@@ -1,1 +1,0 @@
-qemu-img resize jammy-server-cloudimg-amd64-4.raw +1T
