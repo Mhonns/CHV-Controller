@@ -39,7 +39,7 @@ pub fn get_cloud_image(config_path: &str, image: &str) {
         }
 }
 
-pub fn write_cloud_config(vm_id: u8, config_path: &str) -> std::io::Result<()> {
+pub fn write_cloud_config(vm_id: i16, config_path: &str) -> std::io::Result<()> {
     let file_path = format!("{}/cloud-config.sh", config_path);
     let content = format!(r#"#!/usr/bin/env bash
 set -x
@@ -111,7 +111,7 @@ ethernets:
     Ok(())
 }
 
-pub fn write_vm_config(vm_id: u8, config_path: &str, image: &str, cpu: i32, ram: i32) 
+pub fn write_vm_config(vm_id: i16, config_path: &str, image: &str, cpu: i32, ram: i32) 
                         -> std::io::Result<()> {
     let file_path = format!("{}/vm-config.sh", config_path);
     let ip = format!("ip=192.168.{}.1,mask=255.255.255.0", vm_id);
@@ -152,40 +152,5 @@ pub fn run_cloud_init(config_path: &str) -> i32 {
                 return -1;
             }
         }
-
     return 1;
-}
-
-pub fn start_vm(config_path: &str) -> i32 {
-    match Command::new("sh").arg("-c")
-        .arg(format!("sudo sh {}/vm-config.sh", config_path))
-        .output() {
-            Ok(output) => {
-                if !output.status.success() {
-                    eprintln!("Command failed: {:?}", String::from_utf8_lossy(&output.stderr));
-                    return -1;
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to execute command: {}", e);
-                return -1;
-            }
-        }
-
-    return 1;
-}
-
-pub fn resize_storage(config_path: &str, image: &str, storage: &str) {
-    println!("{}", format!("qemu-img resize {}/{}.raw +{}", config_path, image, storage));
-    match Command::new("sh").arg("-c")
-        .arg(format!("qemu-img resize {}/{}.raw +{}", 
-                        config_path, image, storage))
-        .output() {
-            Ok(output) => {
-                if !output.status.success() {
-                    eprintln!("Command failed: {:?}", String::from_utf8_lossy(&output.stderr));
-                }
-            }
-            Err(e) => eprintln!("Failed to execute command: {}", e),
-        }
 }
