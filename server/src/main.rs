@@ -22,7 +22,7 @@ use crate::lib::lib::{
     find_free_slot,
     modify_slot,
     i16_to_usize,
-};=
+};
 
 // VM init funcitons
 mod init_vm;
@@ -45,7 +45,7 @@ use manage_vm:: {
 };
 
 fn main() {
-    let listener = TcpListener::bind("154.215.14.240:2546").unwrap();
+    let listener = TcpListener::bind("0.0.0.0:2546").unwrap();
     let vm_vec: Arc<Mutex<Vec<VmStatus>>> = Arc::new(Mutex::new(Vec::with_capacity(MAXVM)));
     let vm_vec_clone = Arc::clone(&vm_vec);
     init_vm_vec(&vm_vec_clone);
@@ -113,7 +113,7 @@ fn thread_filtering(mut stream: TcpStream, vm_vec: &Arc<Mutex<Vec<VmStatus>>>) {
     let request_line = lines.next().unwrap().unwrap();
 
     // Create the vm
-    if request_line.starts_with("POST /api/v1/vm") {
+    if request_line.starts_with("POST /api/v1/nodes/0/vmm") {
         // Default values
         let mut image = "focal-server-cloudimg-amd64".to_string();
         let mut cpu = 4;
