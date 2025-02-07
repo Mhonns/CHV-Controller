@@ -1,0 +1,1 @@
+rm -rf /tmp/cloud-hypervisor*
