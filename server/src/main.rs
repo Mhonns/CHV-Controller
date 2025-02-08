@@ -1,15 +1,19 @@
 use std::{sync::{Arc, Mutex}, fs, thread};
-use axum::{Router, extract::Path, routing::{post, get, put, delete}, http::{HeaderMap,  StatusCode}, 
+use axum::{Router, extract::Path, routing::{post, get, put, delete}, http::{HeaderMap}, 
             response::IntoResponse, Json};
-use serde::Serialize;
-use serde_json::{json, Value};
+use serde::{Serialize};
+use serde_json::{json};
 
+// Main libraries
 mod main_lib;
 use main_lib::structure::{init_vm_vec, find_free_slot, STATUS, VmStatus, MAXVM};
 use main_lib::init_vm::{get_cloud_image, write_cloud_config, create_cloud_init_files, write_vm_config, run_cloud_init};
-use main_lib::manage_vm::{start_vm, resize_storage, force_terminate, delete_vm, get_vm_config, monitor_vms};
-use main_lib::manage_pci::get_pcis_info;
+use main_lib::manage_vm::{start_vm, resize_storage, monitor_vms};
 
+// Preprocessing libraries
+mod filters_lib;
+use filters_lib::filter_vm_manage::{filter_start_vm, filter_stop_vm, filter_restart_vm, filter_delete_vm};
+use filters_lib::filter_hardware::{filter_get_vm_config, filter_pcis_info, filter_add_pci};
 
 #[derive(Serialize)]
 struct VmInfo {
@@ -103,97 +107,6 @@ async fn get_vm_status(vm_vec: Arc<Mutex<Vec<VmStatus>>>,
     }))
 }
 
-async fn filter_start_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
-                            Path(vm_id): Path<String>) -> StatusCode {
-    
-    println!("\nValidating the vm id..");
-    let vm_id: i16 = match vm_id.parse() {
-        Ok(id) => id,
-        Err(_) => return StatusCode::METHOD_NOT_ALLOWED,
-    };
-
-    let config_path = format!("../vms-config/{}", vm_id);
-    thread::spawn(move || {
-        println!("\nRunning the VM..");
-        let vm_status = start_vm(&vm_vec, vm_id, &config_path);
-        if vm_status != 1 {
-            println!("\nError: Cannot boot the VM.");
-        }
-    });
-
-    StatusCode::ACCEPTED
-}
-
-async fn filter_stop_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
-                            Path(vm_id): Path<String>) -> StatusCode {
-    
-    println!("\nValidating the vm id..");
-    let vm_id: i16 = match vm_id.parse() {
-        Ok(id) => id,
-        Err(_) => return StatusCode::METHOD_NOT_ALLOWED,
-    };
-
-    println!("\nForce terminating the vm..");
-    force_terminate(&vm_vec, vm_id);
-    StatusCode::ACCEPTED
-}
-
-async fn filter_restart_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
-                            Path(vm_id): Path<String>) -> StatusCode {
-    println!("\nValidating the vm id..");
-    let vm_id: i16 = match vm_id.parse() {
-        Ok(id) => id,
-        Err(_) => return StatusCode::METHOD_NOT_ALLOWED,
-    };
-
-    println!("\nForce terminating the vm..");
-    force_terminate(&vm_vec, vm_id);
-
-    let config_path = format!("../vms-config/{}", vm_id);
-    thread::spawn(move || {
-        println!("\nRunning the VM..");
-        let vm_status = start_vm(&vm_vec, vm_id, &config_path);
-        if vm_status != 1 {
-            println!("\nError: Cannot boot the VM.");
-        }
-    });
-
-    StatusCode::ACCEPTED
-}
-
-async fn filter_delete_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
-                        Path(vm_id): Path<String>) -> StatusCode {
-
-    println!("\nValidating the vm id..");
-    let vm_id: i16 = match vm_id.parse() {
-        Ok(id) => id,
-        Err(_) => return StatusCode::METHOD_NOT_ALLOWED,
-    };
-
-    println!("\nDeleting the vm..");
-    delete_vm(&vm_vec, vm_id);
-    StatusCode::ACCEPTED
-}
-
-async fn filter_pcis_info() -> Json<Value> {
-    println!("\nGetting the pcis info..");
-    let devices = get_pcis_info().await;
-    Json(json!({ "devices": devices }))
-}
-
-async fn filter_get_vm_config(Path(vm_id): Path<String>) -> impl IntoResponse {
-    println!("\nValidating the vm id..");
-    let vm_id: i16 = match vm_id.parse() {
-        Ok(id) => id,
-        Err(_) => return Json(json!({"Error": vm_id})),
-    };
-
-    println!("\nGetting the vm config..");
-    let configs = get_vm_config(vm_id);
-    Json(json!({ "configs": configs }))
-}
-
-
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     // Init vm data structure
@@ -207,7 +120,7 @@ async fn main() {
     let vm_config_str = binding.as_str();
     let pci_str = format!("/api/v1/nodes/{}/vmm/hardware/pci", node_name);
     let app = Router::new()
-        // Create and get status
+        // Create and get status VMM
         .route(
             vmm_str.as_str(),
             post({
@@ -222,7 +135,7 @@ async fn main() {
                 move || async move { get_vms_info(vm_vec).await }
             }),
         )
-        // Individuals vm
+        // Individuals VM
         .route(
             (vmm_str.clone() + "/{vm_id}/status").as_str(),
             get({
@@ -258,18 +171,15 @@ async fn main() {
                 move |path| filter_delete_vm(vm_vec, path)
             }),
         )
-        // Virtual machine configuration
+        // Hardware
         .route(
             vm_config_str,
-            get({
-                move |path| filter_get_vm_config(path)
-            }),
+            get(move |path| filter_get_vm_config(path)),
         )
         .route(
             vm_config_str,
             put({
-                let vm_vec = Arc::clone(&vm_vec);
-                move |path| filter_restart_vm(vm_vec, path)
+                move |path, json_data| filter_add_pci(path, json_data)
             }),
         )
         .route(
@@ -279,12 +189,9 @@ async fn main() {
                 move |path| filter_restart_vm(vm_vec, path)
             }),
         )
-        // Hardware
         .route(
             pci_str.as_str(),
-            get({
-                filter_pcis_info().await
-            }),
+            get( filter_pcis_info().await ),
         );
         
 
