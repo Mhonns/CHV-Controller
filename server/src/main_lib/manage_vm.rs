@@ -12,8 +12,9 @@ use std::{
     thread,
 };
 
-use crate::main_lib::structure::STATUS;
+use crate::main_lib::structure::{mark_vm_stop};
 use sysinfo::System;
+use sha1::{Sha1, Digest};
 
 pub fn start_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16, config_path: &str) -> i32 {
     {
@@ -54,8 +55,8 @@ pub fn force_terminate(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
         if kill_status.success() {
             println!("The process {} was terminated", pid_str);
             {
-                let mut vm_vec = vm_vec.lock().unwrap();
-                vm_vec[vm_id as usize].status = 0;
+                let vm_vec = vm_vec.lock().unwrap();
+                mark_vm_stop(vm_vec, vm_id as usize);
             }
         } else {
             println!("There is a problem while removing and end the process");
@@ -76,7 +77,7 @@ pub fn force_terminate(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
     }
 }
 
-pub fn get_vm_config(vm_id: i16) {
+pub fn get_vm_config(vm_id: i16) -> String {
     let api_socket = format!("/tmp/cloud-hypervisor{}.sock", vm_id);
     let output = Command::new("sudo")
         .arg("ch-remote")
@@ -88,50 +89,27 @@ pub fn get_vm_config(vm_id: i16) {
     match output {
         Ok(output) => {
             if output.status.success() {
-                println!("Output: {}", String::from_utf8(output.stdout).unwrap());
+                let output_str = String::from_utf8(output.stdout).unwrap();
+                let mut hasher = Sha1::new();
+                hasher.update(output_str.as_bytes());
+                let result = hasher.finalize();
                 println!("Get the virtual machine configuration successfully.");
+                return format!("{:x}", result);
             } else {
                 eprintln!(
                     "Command failed with exit code: {:?}\nError: {}",
                     output.status.code(),
                     String::from_utf8_lossy(&output.stderr)
                 );
+                return "Error: Can not get the config for this vm".to_string()
             }
         }
         Err(e) => {
             eprintln!("Failed to execute command: {}", e);
+            return "Error: Can not get the config for this vm".to_string()
         }
     }
 }
-
-// pub fn add_pci_device(vm_id: i16, device_id: &str) {
-//     let api_socket = format!("/tmp/cloud-hypervisor{}.sock", vm_id);
-//     let output = Command::new("sudo")
-//         .arg("ch-remote")
-//         .arg("--api-socket")
-//         .arg(api_socket)
-//         .arg("add-device")
-//         .arg(format!("path=/sys/bus/pci/devices/{}/", device_id))
-//         .output();
-
-//     match output {
-//         Ok(output) => {
-//             if output.status.success() {
-//                 println!("Output: {:?}", output);
-//                 println!("Get the virtual machine configuration successfully.");
-//             } else {
-//                 eprintln!(
-//                     "Command failed with exit code: {:?}\nError: {}",
-//                     output.status.code(),
-//                     String::from_utf8_lossy(&output.stderr)
-//                 );
-//             }
-//         }
-//         Err(e) => {
-//             eprintln!("Failed to execute command: {}", e);
-//         }
-//     }
-// }
 
 // pub fn stop_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
 //     {
@@ -172,15 +150,15 @@ pub fn get_vm_proc_id(vm_id: i16) -> String {
     let search_command = format!("/tmp/cloud-hypervisor{}.sock", vm_id); 
     let s = System::new_all();
     for process in s.processes_by_name(OsStr::new("cloud-h")) {
-        println!("Process Info:\n\
-                PID: {}\n\
-                Name: {}\n\
-                Memory: {} KB\n\
-                CPU Usage: {}%\n",
-                process.pid(),
-                process.name().to_string_lossy(),
-                process.memory(),
-                process.cpu_usage());
+        // println!("Process Info:\n\
+        //         PID: {}\n\
+        //         Name: {}\n\
+        //         Memory: {} KB\n\
+        //         CPU Usage: {}%\n",
+        //         process.pid(),
+        //         process.name().to_string_lossy(),
+        //         process.memory(),
+        //         process.cpu_usage());
         if process.cmd().iter().any(|cmd| cmd.to_string_lossy().contains(&search_command)) {
             return process.pid().to_string();
         }
@@ -230,11 +208,13 @@ pub async fn monitor_vms(vm_vec: &Arc<Mutex<Vec<VmStatus>>>) {
                 match result {
                     Ok(_) => {
                         vm_vec[vm_id].status = 2;
+                        if vm_vec[vm_id].process_id == "".into() {
+                            vm_vec[vm_id].process_id = get_vm_proc_id(vm_id.try_into().unwrap()).into();
+                        }
                     },
                     Err(_) => {
                         if vm_vec[vm_id].status == 2 {
                             vm_vec[vm_id].status = 3;
-                            println!("{}", STATUS[vm_vec[vm_id].status as usize]);
                         }
                     }
                 }
@@ -243,8 +223,7 @@ pub async fn monitor_vms(vm_vec: &Arc<Mutex<Vec<VmStatus>>>) {
                 if vm_vec[vm_id].lost_signal_count > 0 {
                     vm_vec[vm_id].lost_signal_count -= 1;
                 } else {
-                    vm_vec[vm_id].status = 0;
-                    vm_vec[vm_id].lost_signal_count = 3;
+                    mark_vm_stop(vm_vec, vm_id);
                     println!("vm_id: {} has no signal", vm_id);  
                 }
             }
