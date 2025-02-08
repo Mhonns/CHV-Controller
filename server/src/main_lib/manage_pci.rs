@@ -1,5 +1,6 @@
 use pci_info::{PciInfo};
 use serde_json::{json, Value};
+use std::process::Command;
 
 pub async fn get_pcis_info() -> Vec<Value> {
     let info = match PciInfo::enumerate_pci() {
@@ -32,4 +33,62 @@ pub async fn get_pcis_info() -> Vec<Value> {
     }
 
     devices
+}
+
+pub fn add_pci_device(vm_id: i16, device_id: &str) {
+    let api_socket = format!("/tmp/cloud-hypervisor{}.sock", vm_id);
+    let output = Command::new("sudo")
+        .arg("ch-remote")
+        .arg("--api-socket")
+        .arg(api_socket)
+        .arg("add-device")
+        .arg(format!("path=/sys/bus/pci/devices/{}/", device_id))
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                println!("Output: {:?}", output);
+                println!("Set the virtual machine configuration successfully.");
+            } else {
+                eprintln!(
+                    "Command failed with exit code: {:?}\nError: {}",
+                    output.status.code(),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to execute command: {}", e);
+        }
+    }
+}
+
+pub fn remove_pci_device(vm_id: i16, device_id: &str) {
+    let api_socket = format!("/tmp/cloud-hypervisor{}.sock", vm_id);
+    let output = Command::new("sudo")
+        .arg("ch-remote")
+        .arg("--api-socket")
+        .arg(api_socket)
+        .arg("remove-device")
+        .arg(format!("{}", device_id))
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                println!("Output: {:?}", output);
+                println!("Set the virtual machine configuration successfully.");
+            } else {
+                eprintln!(
+                    "Command failed with exit code: {:?}\nError: {}",
+                    output.status.code(),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to execute command: {}", e);
+        }
+    }
 }
