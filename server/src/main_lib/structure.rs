@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub const STATUS: [&str; 5] = ["Stopped", "Booting", "Running", "No Signal", "Stopping"]; 
 pub const MAXVM: usize = 253;
@@ -32,3 +32,10 @@ pub fn find_free_slot(vm_vec: &Arc<Mutex<Vec<VmStatus>>>) -> i16 {
     }
     return -1;
 }   
+
+pub fn mark_vm_stop(mut vm_vec: MutexGuard<'_, Vec<VmStatus>>, vm_id: usize) {
+    vm_vec[vm_id].status = 0;
+    vm_vec[vm_id].process_id = "".into();
+    vm_vec[vm_id].lost_signal_count = 3;
+    println!("vm_id: {} has no signal", vm_id);  
+}
