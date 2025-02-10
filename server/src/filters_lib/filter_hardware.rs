@@ -71,13 +71,10 @@ pub async fn filter_remove_pci(Path(vm_id): Path<String>, Json(payload): Json<Re
         Err(_) => return Json(json!({"Error": vm_id})),
     };
 
-    let mut pcis_detail = Vec::new();
     for pci in payload.hostpcis {
         println!("\nTry removing the passing through device {}..", pci.address);
         // Detail example is "{"id":"_vfio3","bdf":"0000:00:06.0"}"
-        let detail = remove_pci_device(vm_id, &pci.address);
-        let pci_json: Value = serde_json::from_str(&detail).unwrap();
-        pcis_detail.push(pci_json);
+        let _ = remove_pci_device(vm_id, &pci.address);
     }
    
     println!("\nGetting the vm config..");
