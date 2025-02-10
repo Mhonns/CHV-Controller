@@ -13,7 +13,7 @@ use main_lib::manage_vm::{start_vm, resize_storage, monitor_vms};
 // Preprocessing libraries
 mod filters_lib;
 use filters_lib::filter_vm_manage::{filter_start_vm, filter_stop_vm, filter_restart_vm, filter_delete_vm};
-use filters_lib::filter_hardware::{filter_get_vm_config, filter_pcis_info, filter_add_pci};
+use filters_lib::filter_hardware::{filter_get_vm_config, filter_pcis_info, filter_add_pci, filter_remove_pci};
 
 #[derive(Serialize)]
 struct VmInfo {
@@ -185,8 +185,7 @@ async fn main() {
         .route(
             vm_config_str,
             delete({
-                let vm_vec = Arc::clone(&vm_vec);
-                move |path| filter_restart_vm(vm_vec, path)
+                move |path, json_data| filter_remove_pci(path, json_data)
             }),
         )
         .route(
