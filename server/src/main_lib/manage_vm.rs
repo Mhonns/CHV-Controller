@@ -43,7 +43,8 @@ pub fn start_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16, config_path: &st
 }
 
 pub fn force_terminate(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
-    let pid_str = get_vm_proc_id(vm_id);
+    let vm_vec = vm_vec.lock().unwrap();
+    let pid_str: String = (vm_vec[vm_id as usize].process_id).clone().into();
     if pid_str != "None" {
         let kill_status = Command::new("sudo")
             .arg("kill")
@@ -54,10 +55,7 @@ pub fn force_terminate(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
 
         if kill_status.success() {
             println!("The process {} was terminated", pid_str);
-            {
-                let vm_vec = vm_vec.lock().unwrap();
-                mark_vm_stop(vm_vec, vm_id as usize);
-            }
+            mark_vm_stop(vm_vec, vm_id as usize);
         } else {
             println!("There is a problem while removing and end the process");
         }
@@ -90,11 +88,12 @@ pub fn get_vm_config(vm_id: i16) -> String {
         Ok(output) => {
             if output.status.success() {
                 let output_str = String::from_utf8(output.stdout).unwrap();
-                let mut hasher = Sha1::new();
-                hasher.update(output_str.as_bytes());
-                let result = hasher.finalize();
-                println!("Get the virtual machine configuration successfully.");
-                return format!("{:x}", result);
+                // let mut hasher = Sha1::new();
+                // hasher.update(output_str.as_bytes());
+                // let result = hasher.finalize();
+                // println!("Get the virtual machine configuration successfully.");
+                // return format!("{:x}", result);
+                return output_str
             } else {
                 eprintln!(
                     "Command failed with exit code: {:?}\nError: {}",
@@ -110,38 +109,6 @@ pub fn get_vm_config(vm_id: i16) -> String {
         }
     }
 }
-
-// pub fn stop_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
-//     {
-//         let mut vm_vec = vm_vec.lock().unwrap();
-//         vm_vec[vm_id as usize].status = 4;
-//     }
-
-//     let api_socket = format!("/tmp/cloud-hypervisor{}.sock", vm_id);
-//     let output = Command::new("sudo")
-//         .arg("ch-remote")
-//         .arg("--api-socket")
-//         .arg(api_socket)
-//         .arg("shutdown")
-//         .output();
-
-//     match output {
-//         Ok(output) => {
-//             if output.status.success() {
-//                 println!("Shutdown command executed successfully.");
-//             } else {
-//                 eprintln!(
-//                     "Command failed with exit code: {:?}\nError: {}",
-//                     output.status.code(),
-//                     String::from_utf8_lossy(&output.stderr)
-//                 );
-//             }
-//         }
-//         Err(e) => {
-//             eprintln!("Failed to execute command: {}", e);
-//         }
-//     }
-// }
 
 pub fn get_vm_proc_id(vm_id: i16) -> String {
     let mut s = System::new_all();
@@ -199,7 +166,7 @@ pub async fn monitor_vms(vm_vec: &Arc<Mutex<Vec<VmStatus>>>) {
         for vm_id in 0..MAXVM {
             // VM: Created and running case -> mark no signal
             let mut vm_vec = vm_vec.lock().unwrap();
-            if vm_vec[vm_id].status == 1 || vm_vec[vm_id].status == 2 {
+            if vm_vec[vm_id].status != -1 {
                 let addr = format!("192.168.{}.2", vm_id).parse().unwrap();
                 let data = [1,2,3];
                 let timeout = Duration::from_secs(1);
@@ -213,13 +180,14 @@ pub async fn monitor_vms(vm_vec: &Arc<Mutex<Vec<VmStatus>>>) {
                         }
                     },
                     Err(_) => {
-                        if vm_vec[vm_id].status == 2 {
+                        {
                             vm_vec[vm_id].status = 3;
                         }
                     }
                 }
+            }
             // VM: No signal case  -> mark stop
-            } else if vm_vec[vm_id].status == 3 || vm_vec[vm_id].status == 4 {
+            if vm_vec[vm_id].status == 3 || vm_vec[vm_id].status == 4 {
                 if vm_vec[vm_id].lost_signal_count > 0 {
                     vm_vec[vm_id].lost_signal_count -= 1;
                 } else {
