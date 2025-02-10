@@ -67,7 +67,7 @@ pub fn add_pci_device(vm_id: i16, device_id: &str) -> String {
     }
 }
 
-pub fn remove_pci_device(vm_id: i16, device_id: &str) {
+pub fn remove_pci_device(vm_id: i16, device_id: &str) -> String {
     let api_socket = format!("/tmp/cloud-hypervisor{}.sock", vm_id);
     let output = Command::new("sudo")
         .arg("ch-remote")
@@ -80,18 +80,21 @@ pub fn remove_pci_device(vm_id: i16, device_id: &str) {
     match output {
         Ok(output) => {
             if output.status.success() {
-                println!("Output: {:?}", output);
+                let output_str = String::from_utf8(output.stdout).unwrap();
                 println!("Set the virtual machine configuration successfully.");
+                return output_str
             } else {
                 eprintln!(
                     "Command failed with exit code: {:?}\nError: {}",
                     output.status.code(),
                     String::from_utf8_lossy(&output.stderr)
                 );
+                return "None".to_string();
             }
         }
         Err(e) => {
             eprintln!("Failed to execute command: {}", e);
+            return "None".to_string();
         }
     }
 }
