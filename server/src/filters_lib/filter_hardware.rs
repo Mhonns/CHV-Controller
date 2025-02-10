@@ -27,11 +27,11 @@ pub async fn filter_pcis_info() -> Json<Value> {
 #[derive(Deserialize)]
 pub struct HostPci {
     address: String,
-    class_code: u32,
-    device_id: u32,
-    revision: u32,
-    subclass_code: u32,
-    vendor_id: u32,
+    // class_code: u32,
+    // device_id: u32,
+    // revision: u32,
+    // subclass_code: u32,
+    // vendor_id: u32,
 }
 
 #[derive(Deserialize)]
