@@ -14,7 +14,7 @@ use std::{
 
 use crate::main_lib::structure::{mark_vm_stop};
 use sysinfo::System;
-use sha1::{Sha1, Digest};
+// use sha1::{Sha1, Digest};
 
 pub fn start_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16, config_path: &str) -> i32 {
     {
