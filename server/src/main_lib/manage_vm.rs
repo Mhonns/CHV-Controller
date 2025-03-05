@@ -60,7 +60,7 @@ pub fn shutdown_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
     match output {
         Ok(output) => {
             if output.status.success() {
-                let output_str = String::from_utf8(output.stdout).unwrap();
+                let _ = String::from_utf8(output.stdout).unwrap();
             } else {
                 eprintln!(
                     "Command failed with exit code: {:?}\nError: {}",

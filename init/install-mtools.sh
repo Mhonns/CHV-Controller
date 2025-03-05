@@ -3,4 +3,5 @@ python get-pip.py
 
 sudo apt-get install python-dev
 sudo apt-get install gcc
-sudo pip install mtools
+sudo apt install mtools
+sudo apt install qemu-utils

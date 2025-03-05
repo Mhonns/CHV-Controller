@@ -62,7 +62,7 @@ async fn create_vm(headers: HeaderMap, vm_vec: Arc<Mutex<Vec<VmStatus>>>) -> Jso
         } 
 
         {
-            let mut vm_vec = &mut vm_vec.lock().unwrap();
+            let vm_vec = &mut vm_vec.lock().unwrap();
             vm_vec[vm_id as usize].status = 0;
         }
         
