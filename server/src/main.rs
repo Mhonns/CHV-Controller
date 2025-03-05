@@ -7,13 +7,16 @@ use serde_json::{json};
 // Main libraries
 mod main_lib;
 use main_lib::structure::{init_vm_vec, find_free_slot, STATUS, VmStatus, MAXVM};
-use main_lib::init_vm::{get_cloud_image, write_cloud_config, create_cloud_init_files, write_vm_config, run_cloud_init};
+use main_lib::init_vm::{get_cloud_image, write_cloud_config, create_cloud_init_files, 
+                        write_vm_config, run_cloud_init};
 use main_lib::manage_vm::{start_vm, resize_storage, monitor_vms};
 
 // Preprocessing libraries
 mod filters_lib;
-use filters_lib::filter_vm_manage::{filter_start_vm, filter_stop_vm, filter_restart_vm, filter_delete_vm};
-use filters_lib::filter_hardware::{filter_get_vm_config, filter_pcis_info, filter_add_pci, filter_remove_pci};
+use filters_lib::filter_vm_manage::{filter_start_vm, filter_stop_vm, filter_reboot_vm, 
+                                    filter_delete_vm, filter_shutdown_vm};
+use filters_lib::filter_hardware::{filter_get_vm_config, filter_pcis_info, filter_add_pci, 
+                                    filter_add_gpu, filter_remove_pci};
 
 #[derive(Serialize)]
 struct VmInfo {
@@ -56,7 +59,14 @@ async fn create_vm(headers: HeaderMap, vm_vec: Arc<Mutex<Vec<VmStatus>>>) -> Jso
         let vm_status = start_vm(&vm_vec, vm_id, &config_path);
         if vm_status != 1 && cloud_status != 1 {
             println!("\nError: Cannot boot the VM.");
+        } 
+
+        {
+            let mut vm_vec = &mut vm_vec.lock().unwrap();
+            vm_vec[vm_id as usize].status = 0;
         }
+        
+        return
     });
     
     Json(json!({
@@ -158,10 +168,17 @@ async fn main() {
             }),
         )
         .route(
-            (vmm_str.clone() + "/{vm_id}/restart").as_str(),
+            (vmm_str.clone() + "/{vm_id}/reboot").as_str(),
             post({
                 let vm_vec = Arc::clone(&vm_vec);
-                move |path| filter_restart_vm(vm_vec, path)
+                move |path| filter_reboot_vm(vm_vec, path)
+            }),
+        )
+        .route(
+            (vmm_str.clone() + "/{vm_id}/shutdown").as_str(),
+            post({
+                let vm_vec = Arc::clone(&vm_vec);
+                move |path| filter_shutdown_vm(vm_vec, path)
             }),
         )
         .route(
@@ -190,9 +207,12 @@ async fn main() {
         )
         .route(
             pci_str.as_str(),
-            get( filter_pcis_info().await ),
+            get( filter_pcis_info(&"", &"").await ),
+        )
+        .route(
+            (vmm_str.clone() + "/{vm_id}/gpus").as_str(),
+            put(move |path, json_data| filter_add_gpu(path, json_data)),
         );
-        
 
     // Spawn monitoring as a task
     let _ = tokio::spawn({

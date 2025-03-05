@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
-pub const STATUS: [&str; 5] = ["Stopped", "Booting", "Running", "No Signal", "Stopping"]; 
+pub const STATUS: [&str; 8] = ["Stopped", "Booting", "Running", "Unknown", 
+                                "Stopping", "Paused", "Locked", "Migrating"]; 
 pub const MAXVM: usize = 253;
 
 pub struct VmStatus {

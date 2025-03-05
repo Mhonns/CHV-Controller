@@ -2,7 +2,7 @@ use std::{sync::{Arc, Mutex}, thread};
 use axum::{extract::Path, http::{StatusCode}};
 
 use crate::main_lib::structure::{VmStatus};
-use crate::main_lib::manage_vm::{start_vm, force_terminate, delete_vm};
+use crate::main_lib::manage_vm::{start_vm, force_terminate, delete_vm, shutdown_vm};
 
 pub async fn filter_start_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
                             Path(vm_id): Path<String>) -> StatusCode {
@@ -39,7 +39,21 @@ pub async fn filter_stop_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>,
     StatusCode::ACCEPTED
 }
 
-pub async fn filter_restart_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
+pub async fn filter_shutdown_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
+    Path(vm_id): Path<String>) -> StatusCode {
+
+    println!("\nValidating the vm id..");
+    let vm_id: i16 = match vm_id.parse() {
+    Ok(id) => id,
+    Err(_) => return StatusCode::METHOD_NOT_ALLOWED,
+    };
+
+    println!("\nShutting down the vm..");
+    shutdown_vm(&vm_vec, vm_id);
+    StatusCode::ACCEPTED
+}
+
+pub async fn filter_reboot_vm(vm_vec: Arc<Mutex<Vec<VmStatus>>>, 
                             Path(vm_id): Path<String>) -> StatusCode {
     println!("\nValidating the vm id..");
     let vm_id: i16 = match vm_id.parse() {

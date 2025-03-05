@@ -16,6 +16,8 @@ use crate::main_lib::structure::{mark_vm_stop};
 use sysinfo::System;
 // use sha1::{Sha1, Digest};
 
+const INTERVAL: u64 = 15000;
+
 pub fn start_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16, config_path: &str) -> i32 {
     {
         let mut vm_vec = vm_vec.lock().unwrap();
@@ -40,6 +42,37 @@ pub fn start_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16, config_path: &st
             }
         }
     return 1;
+}
+
+pub fn shutdown_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
+    {
+        let mut vm_vec = vm_vec.lock().unwrap();
+        vm_vec[vm_id as usize].status = 4;
+    }
+    let api_socket = format!("/tmp/cloud-hypervisor{}.sock", vm_id);
+    let output = Command::new("sudo")
+        .arg("ch-remote")
+        .arg("--api-socket")
+        .arg(api_socket)
+        .arg("shutdown")
+        .output();
+
+    match output {
+        Ok(output) => {
+            if output.status.success() {
+                let output_str = String::from_utf8(output.stdout).unwrap();
+            } else {
+                eprintln!(
+                    "Command failed with exit code: {:?}\nError: {}",
+                    output.status.code(),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to execute command: {}", e);
+        }
+    }
 }
 
 pub fn force_terminate(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
@@ -88,11 +121,6 @@ pub fn get_vm_config(vm_id: i16) -> String {
         Ok(output) => {
             if output.status.success() {
                 let output_str = String::from_utf8(output.stdout).unwrap();
-                // let mut hasher = Sha1::new();
-                // hasher.update(output_str.as_bytes());
-                // let result = hasher.finalize();
-                // println!("Get the virtual machine configuration successfully.");
-                // return format!("{:x}", result);
                 return output_str
             } else {
                 eprintln!(
@@ -159,14 +187,15 @@ pub fn resize_storage(config_path: &str, image: &str, storage: &str) {
 pub async fn monitor_vms(vm_vec: &Arc<Mutex<Vec<VmStatus>>>) {
     loop {
         // Sleeping
-        let wait_delay = Duration::from_millis(15000);
+        let wait_delay = Duration::from_millis(INTERVAL);
         thread::sleep(wait_delay);
 
         // Find the all vm_id
         for vm_id in 0..MAXVM {
-            // VM: Created and running case -> mark no signal
+
+            // VM: Running case -> mark no signal
             let mut vm_vec = vm_vec.lock().unwrap();
-            if vm_vec[vm_id].status != -1 {
+            if vm_vec[vm_id].status > 0 {
                 let addr = format!("192.168.{}.2", vm_id).parse().unwrap();
                 let data = [1,2,3];
                 let timeout = Duration::from_secs(1);
@@ -180,7 +209,7 @@ pub async fn monitor_vms(vm_vec: &Arc<Mutex<Vec<VmStatus>>>) {
                         }
                     },
                     Err(_) => {
-                        {
+                        if vm_vec[vm_id].status != 1 {
                             vm_vec[vm_id].status = 3;
                         }
                     }

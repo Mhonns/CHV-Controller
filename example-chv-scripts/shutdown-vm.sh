@@ -1,0 +1,1 @@
+sudo ch-remote --api-socket=/tmp/cloud-hypervisor0.sock shutdown
