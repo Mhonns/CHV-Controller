@@ -6,12 +6,13 @@ use std::{
     fs::OpenOptions,
 };
 
-pub fn get_cloud_image(config_path: &str, image: &str) {
-    let og_file_path = &format!("../os/{}.img", image);
-    let file_exist = Path::new(og_file_path).exists();
+pub fn get_cloud_image(config_path: &str, url: &str) {
+    let filename = url.rsplit('/').next().unwrap_or("");
+    let os_file_path = &format!("../os/{}", filename);
+    let file_exist = Path::new(os_file_path).exists();
     if !file_exist {
         match Command::new("sh").arg("-c")
-        .arg(format!("wget https://cloud-images.ubuntu.com/focal/current/{}.img -P ../os/", image))
+        .arg(format!("wget {} -P ../os/", url))
         .output() {
             Ok(output) => {
                 if !output.status.success() {
@@ -25,10 +26,10 @@ pub fn get_cloud_image(config_path: &str, image: &str) {
         println!("[Skipped] Cloud image found locally");
     }
 
-    let image_name = image.split(".").nth(0).unwrap_or("");
+    let image_name = filename.split(".").nth(0).unwrap_or("");
     match Command::new("sh").arg("-c")
         .arg(format!("qemu-img convert -p -f qcow2 -O raw {} {}/{}.raw", 
-                        og_file_path, config_path, image_name))
+                        os_file_path, config_path, image_name))
         .output() {
             Ok(output) => {
                 if !output.status.success() {
@@ -111,8 +112,9 @@ ethernets:
     Ok(())
 }
 
-pub fn write_vm_config(vm_id: i16, config_path: &str, image: &str, cpu: i32, ram: i32) 
+pub fn write_vm_config(vm_id: i16, config_path: &str, url: &str, cpu: i32, ram: i32) 
                         -> std::io::Result<()> {
+    let image = url.rsplit('/').next().unwrap_or("").split('.').nth(0).unwrap_or("");
     let file_path = format!("{}/vm-config.sh", config_path);
     let ip = format!("ip=192.168.{}.1,mask=255.255.255.0", vm_id);
     let content = format!(r#"cloud-hypervisor \

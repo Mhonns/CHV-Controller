@@ -16,7 +16,7 @@ use crate::main_lib::structure::{mark_vm_stop};
 use sysinfo::System;
 // use sha1::{Sha1, Digest};
 
-const INTERVAL: u64 = 15000;
+const INTERVAL: u64 = 10000;
 
 pub fn start_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16, config_path: &str) -> i32 {
     {
@@ -169,7 +169,8 @@ pub fn delete_vm(vm_vec: &Arc<Mutex<Vec<VmStatus>>>, vm_id: i16) {
     let _ = fs::remove_file(storage_path);
 }
 
-pub fn resize_storage(config_path: &str, image: &str, storage: &str) {
+pub fn resize_storage(config_path: &str, url: &str, storage: &str) {
+    let image = url.rsplit('/').next().unwrap_or("").split('.').nth(0).unwrap_or("");
     println!("{}", format!("qemu-img resize {}/{}.raw +{}", config_path, image, storage));
     match Command::new("sh").arg("-c")
         .arg(format!("qemu-img resize {}/{}.raw +{}", 

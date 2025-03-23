@@ -119,9 +119,17 @@ async fn get_vm_status(vm_vec: Arc<Mutex<Vec<VmStatus>>>,
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
-    // Init vm data structure
+    // Init data structure
     let vm_vec: Arc<Mutex<Vec<VmStatus>>> = Arc::new(Mutex::new(Vec::with_capacity(MAXVM)));
     init_vm_vec(&vm_vec);
+
+    // Spawn monitoring as a task
+    let _ = tokio::spawn({
+        let vm_vec_clone = Arc::clone(&vm_vec);
+        async move {
+            monitor_vms(&vm_vec_clone).await;
+        }
+    });
 
     // Routing configure
     let node_name = "0";
@@ -213,14 +221,6 @@ async fn main() {
             (vmm_str.clone() + "/{vm_id}/gpus").as_str(),
             put(move |path, json_data| filter_add_gpu(path, json_data)),
         );
-
-    // Spawn monitoring as a task
-    let _ = tokio::spawn({
-        let vm_vec_clone = Arc::clone(&vm_vec);
-        async move {
-            monitor_vms(&vm_vec_clone).await;
-        }
-    });
 
     // Run server
     let listener = tokio::net::TcpListener::bind("0.0.0.0:2546").await.unwrap();
