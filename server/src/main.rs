@@ -1,4 +1,4 @@
-use std::{sync::{Arc, Mutex}, fs, thread};
+use std::{sync::{Arc, Mutex}, fs, thread, collections::LinkedList};
 use axum::{Router, extract::Path, routing::{post, get, put, delete}, http::{HeaderMap}, 
             response::IntoResponse, Json};
 use serde::{Serialize};
@@ -6,7 +6,7 @@ use serde_json::{json};
 
 // Main libraries
 mod main_lib;
-use main_lib::structure::{init_vm_vec, find_free_slot, STATUS, VmStatus, MAXVM};
+use main_lib::structure::{STATUS, MAXVM, VmStatus, Ticket, init_vm_vec, find_free_slot};
 use main_lib::init_vm::{get_cloud_image, write_cloud_config, create_cloud_init_files, 
                         write_vm_config, run_cloud_init};
 use main_lib::manage_vm::{start_vm, resize_storage, monitor_vms};
@@ -16,7 +16,7 @@ mod filters_lib;
 use filters_lib::filter_vm_manage::{filter_start_vm, filter_stop_vm, filter_reboot_vm, 
                                     filter_delete_vm, filter_shutdown_vm};
 use filters_lib::filter_hardware::{filter_get_vm_config, filter_pcis_info, filter_add_pci, 
-                                    filter_add_gpu, filter_remove_pci};
+                                    filter_add_gpu, filter_remove_pci, filter_pt_status};
 
 #[derive(Serialize)]
 struct VmInfo {
@@ -122,6 +122,7 @@ async fn main() {
     // Init data structure
     let vm_vec: Arc<Mutex<Vec<VmStatus>>> = Arc::new(Mutex::new(Vec::with_capacity(MAXVM)));
     init_vm_vec(&vm_vec);
+    let ticket_list: Arc<Mutex<LinkedList<Ticket>>> = Arc::new(Mutex::new(LinkedList::new()));
 
     // Spawn monitoring as a task
     let _ = tokio::spawn({
@@ -204,7 +205,8 @@ async fn main() {
         .route(
             vm_config_str,
             put({
-                move |path, json_data| filter_add_pci(path, json_data)
+                let ticket_list = Arc::clone(&ticket_list);
+                move |path, json_data| filter_add_pci(path, json_data, ticket_list)
             }),
         )
         .route(
@@ -216,6 +218,13 @@ async fn main() {
         .route(
             pci_str.as_str(),
             get( filter_pcis_info(&"", &"").await ),
+        )
+        .route(
+            (vmm_str.clone() + "/{vm_id}/pt_status").as_str(),
+            get({
+                let ticket_list = Arc::clone(&ticket_list);
+                move |headers| filter_pt_status(headers, ticket_list)
+            }),
         )
         .route(
             (vmm_str.clone() + "/{vm_id}/gpus").as_str(),
