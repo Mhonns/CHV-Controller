@@ -72,10 +72,6 @@ pub async fn filter_add_pci(Path(vm_id): Path<String>, Json(payload): Json<Reque
     Json(json!({ 
         "ticket_id": ticket_id_cloned
     }))
-   
-    // Json(json!({ 
-    //     "hostpcis": pcis_detail
-    // }))
 }
 
 pub async fn filter_pt_status(headers: HeaderMap, ticket_list: Arc<Mutex<LinkedList<Ticket>>>) 
@@ -96,7 +92,8 @@ pub async fn filter_pt_status(headers: HeaderMap, ticket_list: Arc<Mutex<LinkedL
     }))
 }
 
-pub async fn filter_add_gpu(Path(vm_id): Path<String>, Json(payload): Json<RequestGpuData>) 
+pub async fn filter_add_gpu(Path(vm_id): Path<String>, Json(payload): Json<RequestGpuData>, 
+                            ticket_list: Arc<Mutex<LinkedList<Ticket>>>) 
                             -> impl IntoResponse {
     println!("\nValidating the vm id..");
     let vm_id: i16 = match vm_id.parse() {
@@ -108,30 +105,41 @@ pub async fn filter_add_gpu(Path(vm_id): Path<String>, Json(payload): Json<Reque
     let raw = json!(get_pcis_info(&"class_code", "3").await);
     // let addresses = extract_addresses(&raw);
 
-    let mut pcis_detail = Vec::new();
-    for gpu in payload.hostgpus {
-        let addresses = extract_addresses(&raw, &gpu.device_name);
-        for i in 0..gpu.amount {
-            // Skip if the resource is duplicated or busy
-            let mut j = i;
-            while j < addresses.len() as i32 {
-                let detail = add_pci_device(vm_id, &addresses[j as usize], 3);
-                if detail != "None" {
-                    let pci_json: Value = serde_json::from_str(&detail).unwrap();
-                    pcis_detail.push(pci_json);
-                    break;
+    println!("Generate the ticket id");
+    let payload_str = serde_json::to_string(&payload).unwrap();
+    let ticket_id = generate_ticket(vm_id, payload_str);
+    let ticket_id_cloned = ticket_id.clone();
+    let found_ticket = find_ticket(&ticket_id, &ticket_list);
+
+    if found_ticket.is_none() {
+        task::spawn(async move {
+            let mut pcis_detail = Vec::new();
+            for gpu in payload.hostgpus {
+                let addresses = extract_addresses(&raw, &gpu.device_name);
+                for i in 0..gpu.amount {
+                    // Skip if the resource is duplicated or busy
+                    let mut j = i;
+                    while j < addresses.len() as i32 {
+                        let detail = add_pci_device(vm_id, &addresses[j as usize], 3);
+                        if detail != "None" {
+                            let pci_json: Value = serde_json::from_str(&detail).unwrap();
+                            pcis_detail.push(pci_json);
+                            break;
+                        }
+                        j += 1;
+                    }
                 }
-                j += 1;
             }
-        }
+        });
     }
    
     Json(json!({ 
-       "hostpcis": pcis_detail
+        "ticket_id": ticket_id_cloned
     }))
 }
 
-pub async fn filter_remove_pci(Path(vm_id): Path<String>, Json(payload): Json<RequestPciData>) -> impl IntoResponse {
+pub async fn filter_remove_pci(Path(vm_id): Path<String>, Json(payload): Json<RequestPciData>) 
+                                -> impl IntoResponse {
     println!("\nValidating the vm id..");
     let vm_id: i16 = match vm_id.parse() {
         Ok(id) => id,

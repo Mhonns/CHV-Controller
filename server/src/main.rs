@@ -228,7 +228,10 @@ async fn main() {
         )
         .route(
             (vmm_str.clone() + "/{vm_id}/gpus").as_str(),
-            put(move |path, json_data| filter_add_gpu(path, json_data)),
+            put({
+                let ticket_list = Arc::clone(&ticket_list);
+                move |path, json_data| filter_add_gpu(path, json_data, ticket_list)
+            }),
         );
 
     // Run server
